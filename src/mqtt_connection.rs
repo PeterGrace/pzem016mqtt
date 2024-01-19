@@ -3,11 +3,12 @@ use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
 use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 use tokio::time::Duration;
-use crate::errors::GQGMCMQTTError;
+use crate::errors::MQTTError;
 
 #[derive(Debug)]
 // TODO: decide if I'm implementing mqtt reconnect or just panicking
 #[allow(dead_code)]
+
 pub struct MqttConnection {
     client_name: String,
     server_addr: String,
@@ -46,7 +47,7 @@ impl MqttConnection {
         port: u16,
         username: Option<String>,
         password: Option<String>,
-    ) -> Result<Self, GQGMCMQTTError> {
+    ) -> Result<Self, MQTTError> {
         let mut mqttoptions = MqttOptions::new(&client, &addr, port);
         mqttoptions.set_keep_alive(Duration::from_secs(MQTT_KEEPALIVE_TIME));
         if username.is_some() && password.is_some() {

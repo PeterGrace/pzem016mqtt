@@ -8,7 +8,7 @@ pub struct InboundMessage {
     pub payload: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PublishMessage {
     pub(crate) topic: String,
     pub(crate) payload: Payload,

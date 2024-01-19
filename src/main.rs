@@ -16,8 +16,9 @@ use std::process;
 use std::thread::sleep;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing_subscriber::filter::EnvFilter;
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock, OnceCell};
 use pzem016lib::PZEM;
+use tokio::sync::mpsc::error::TryRecvError;
 use crate::consts::{MPSC_BUFFER_SIZE, POLL_TIME};
 use crate::ipc::{IPCMessage, PublishMessage};
 use crate::mqtt_connection::MqttConnection;
@@ -26,6 +27,7 @@ use crate::payload::{generate_payloads, Payload};
 
 
 lazy_static! {
+    static ref SHUTDOWN: OnceCell<bool> = OnceCell::new();
         //region create SETTINGS static object
     static ref SETTINGS: RwLock<AppConfig> = RwLock::new({
          let cfg_file = match std::env::var("CONFIG_FILE_PATH") {
@@ -57,7 +59,7 @@ pub async fn main() {
         config
             .mqtt_client_id
             .clone()
-            .unwrap_or("sunspec_gateway".to_string()),
+            .unwrap_or("pzem016mqtt".to_string()),
         config.mqtt_server_addr.clone(),
         config.mqtt_server_port.unwrap_or(1883),
         config.mqtt_username.clone(),
@@ -77,7 +79,7 @@ pub async fn main() {
     let (broadcast_tx, _broadcast_rx) = broadcast::channel::<IPCMessage>(16_usize);
 
     let bcasttx = broadcast_tx.clone();
-    let mqtt_handler = tokio::task::spawn(async move {
+    let mut mqtt_handler = tokio::task::spawn(async move {
         let _ = mqtt_poll_loop(
             mqtt_conn,
             mqtt_rx,
@@ -89,29 +91,54 @@ pub async fn main() {
     //endregion
 
     let mut pzem = PZEM::new("10.174.2.48:4196".to_string()).await.expect("couldn't connect to modbus");
+    let pzem_tx = tx.clone();
+    let mut pzem_pzem = pzem.clone();
+    let mut pzem_handler = tokio::task::spawn(async move {
+        let _ = generate_payloads(&mut pzem_pzem,pzem_tx).await;
+    });
+
+    let _ = ctrlc::set_handler(move || {
+        println!("Received Ctrl-C, communicating to threads to stop");
+        let _ = SHUTDOWN.set(true);
+    });
     loop {
-        let payloads = generate_payloads(&mut pzem).await;
-        info!(?payloads);
-        for payload in payloads {
-            if let Err(e) = mqtt_tx.send(
-                IPCMessage::Outbound(PublishMessage {
-                    topic: payload.config_topic,
-                    payload: Payload::Config(payload.config.clone())
-                })
-            ).await {
-                die(&e.to_string());
+        if let Some(shutting_down) = SHUTDOWN.get() {
+                    break;
+        }
+        // check thread health
+        if pzem_handler.is_finished() {
+            warn!("pzem_handler was finished, restarting.");
+            let my_tx = tx.clone();
+            let mut my_pzem = pzem.clone();
+            pzem_handler = tokio::task::spawn(async move {
+                let _ = generate_payloads(&mut my_pzem, my_tx).await;
+            });
+        }
+        match rx.try_recv() {
+            Ok(ipcm) => {
+                match ipcm {
+                    IPCMessage::Inbound(_) => {}
+                    IPCMessage::Outbound(o) => {
+                        if let Err(e) = mqtt_tx.send(
+                            IPCMessage::Outbound(o)
+                        ).await {
+                            die(&e.to_string());
+                        }
+                    }
+                    IPCMessage::PleaseReconnect(_, _) => {}
+                    IPCMessage::Error(_) => {}
+                    IPCMessage::Shutdown => {}
+                }
             }
-            if let Err(e) = mqtt_tx.send(
-                IPCMessage::Outbound(PublishMessage {
-                    topic: payload.state_topic,
-                    payload: Payload::CurrentState(payload.state.clone())
-                })
-            ).await {
-                die(&e.to_string());
-            }
+            Err(e) => match e {
+                TryRecvError::Empty => {}
+                TryRecvError::Disconnected => {
+                    error!("We are disconnected!");
+                }
+            },
 
         }
-        sleep(tokio::time::Duration::from_secs(POLL_TIME as u64));
+        //sleep(tokio::time::Duration::from_millis(100_u64));
     }
 }
 

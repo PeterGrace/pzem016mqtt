@@ -7,4 +7,12 @@ pub struct AppConfig {
     pub mqtt_client_id: Option<String>,
     pub mqtt_username: Option<String>,
     pub mqtt_password: Option<String>,
+    pub devices: Option<Vec<PZEMDevice>>
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct PZEMDevice {
+    pub addr: u8,
+    pub port: String,
+    pub breaker: String,
 }

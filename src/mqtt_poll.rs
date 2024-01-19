@@ -1,11 +1,13 @@
 use crate::consts::MQTT_POLL_INTERVAL_MILLIS;
-use crate::ipc::{IPCMessage, InboundMessage};
+use crate::ipc::IPCMessage;
 use crate::mqtt_connection::MqttConnection;
 use crate::payload::Payload;
-use crate::errors::GQGMCMQTTError;
+use crate::errors::MQTTError;
+use crate::SHUTDOWN;
 use rumqttc::{Event, Incoming, Outgoing, QoS};
 use std::str;
 use std::time::Duration;
+use tokio::task::JoinHandle;
 
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
@@ -16,16 +18,19 @@ pub async fn mqtt_poll_loop(
     mut incoming_rx: tokio::sync::mpsc::Receiver<IPCMessage>,
     mut bcast_rx: tokio::sync::broadcast::Receiver<IPCMessage>,
     outgoing_tx: mpsc::Sender<IPCMessage>,
-) -> Result<(), GQGMCMQTTError> {
-    let task = tokio::spawn(async move {
+) -> Result<(), MQTTError> {
+    let task: JoinHandle<Result<(),MQTTError>> = tokio::spawn(async move {
         let mut conn = mqtt.event_loop;
         let mut dlq: Vec<u16> = vec![];
         loop {
+            if let Some(shutting_down) = SHUTDOWN.get() {
+                    return Err(MQTTError::ExitingThread);
+            }
             let notification = match conn.poll().await {
                 Ok(event) => event,
                 Err(e) => {
                     let msg = format!("Unable to poll mqtt: {e}");
-                    panic!("{}", msg);
+                    return Err(MQTTError::ExitingThread);
                 }
             };
 
@@ -35,7 +40,7 @@ pub async fn mqtt_poll_loop(
                         Incoming::Disconnect => {
                             // we should do something here.
                             error!("mqtt disconnect packet received.");
-                            return;
+                            return Err(MQTTError::ExitingThread);
                         }
                         Incoming::ConnAck(_ca) => {
                             info!("MQTT connection established.");
@@ -81,7 +86,7 @@ pub async fn mqtt_poll_loop(
                 IPCMessage::Shutdown => {
                     info!("MQTT Received shutdown message, exiting thread.");
                     let _ = mqtt.client.disconnect().await;
-                    return Err(GQGMCMQTTError::ExitingThread);
+                    return Err(MQTTError::ExitingThread);
                 }
                 IPCMessage::Inbound(_) => {}
                 IPCMessage::Outbound(_) => {}
@@ -134,7 +139,7 @@ pub async fn mqtt_poll_loop(
                 IPCMessage::Shutdown => {
                     info!("MQTT Received shutdown message, exiting thread.");
                     let _ = mqtt.client.disconnect().await;
-                    return Err(GQGMCMQTTError::ExitingThread);
+                    return Err(MQTTError::ExitingThread);
                 }
                 _ => {}
             },

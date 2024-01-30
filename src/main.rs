@@ -98,7 +98,7 @@ pub async fn main() {
     });
 
     let _ = ctrlc::set_handler(move || {
-        println!("Received Ctrl-C, communicating to threads to stop");
+        println!("Received shutdown signal, communicating to threads to stop");
         let _ = SHUTDOWN.set(true);
     });
     loop {

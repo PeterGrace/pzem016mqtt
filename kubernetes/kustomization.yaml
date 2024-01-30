@@ -9,7 +9,7 @@ resources:
 images:
 - name: IMAGE:TAG
   newName: reg.gfpd.us/library/pzem016mqtt
-  newTag: v0.1.1
+  newTag: v0.1.3
 
 secretGenerator:
 - files:

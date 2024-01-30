@@ -157,7 +157,13 @@ pub async fn generate_payloads(pzem: &mut PZEM, tx: tokio::sync::mpsc::Sender<IP
             let mut config_payload: HAConfigPayload = HAConfigPayload::default();
             let mut state_payload: StatePayload = StatePayload::default();
 
-            let data = pzem.get_data(unit_id).await.expect("couldn't read data");
+            let data = match pzem.get_data(unit_id).await {
+                Ok(d) => d,
+                Err(e) => {
+                    warn!("couldn't read data for {unit_id}: {e}");
+                    continue;
+                }
+            };
 
             //volts
             let config_topic: String = format!("homeassistant/sensor/pzem016-{serial}/volts/config");

@@ -547,7 +547,7 @@ dependencies = [
 
 [[package]]
 name = "pzem016mqtt"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "ctrlc",
  "futures",

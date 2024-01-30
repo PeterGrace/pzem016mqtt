@@ -143,7 +143,7 @@ pub async fn generate_payloads(pzem: &mut PZEM, tx: tokio::sync::mpsc::Sender<IP
         if let Some(shutting_down) = SHUTDOWN.get() {
                     return Err(PZEMError::ExitingThread);
                 }
-        for unit_id in 101..=120 {
+        for unit_id in 101..=140 {
             let model: String = format!("pzem016");
             let serial: String = format!("{unit_id}");
             let device_info = payload::DeviceInfo {

@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: pzem016mqtt
+resources:
+- ns.yaml
+- svcacct.yaml
+- deployment.yaml
+
+images:
+- name: IMAGE:TAG
+  newName: reg.gfpd.us/library/pzem016mqtt
+  newTag: v0.1.1
+
+secretGenerator:
+- files:
+  - config.yaml
+  name: pzem016mqtt-config

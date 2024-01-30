@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pzem016mqtt
+  namespace: pzem016mqtt
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pzem016mqtt
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pzem016mqtt
+    spec:
+      containers:
+      - name: pzem016mqtt
+        image: IMAGE:TAG
+        imagePullPolicy: Always
+        env:
+          - name: CONFIG_FILE_PATH
+            value: /config/config.yaml
+        ports:
+        - containerPort: 9898
+          name: metrics
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+        volumeMounts:
+        - mountPath: /config
+          name: config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      serviceAccount: pzem016mqtt
+      serviceAccountName: pzem016mqtt
+      volumes:
+      - name: config
+        secret:
+          defaultMode: 420
+          secretName: pzem016mqtt-config
